@@ -1,18 +1,17 @@
 import asyncio
 import aiohttp
-from flask import Flask, jsonify
-import random
+from flask import Flask, jsonify, Response
 
 app = Flask(__name__)
 
-# Danh sách URL chứa proxy
+# 🌐 Danh sách URL chứa proxy
 henry_proxy = [
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt",
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt",
 ]
 
-# Danh sách tag thông tin thêm
+# 🏷️ Danh sách tag thông tin thêm
 TAGS = [
     "admin@zproject2",
     "group@zproject3",
@@ -20,7 +19,16 @@ TAGS = [
     "bot@zprojectX_bot"
 ]
 
-# Kiểm tra proxy sống
+# 🧠 Xác định loại proxy từ URL
+def detect_type(url):
+    if "socks5" in url:
+        return "socks5"
+    elif "socks4" in url:
+        return "socks4"
+    else:
+        return "http"
+
+# ✅ Kiểm tra proxy sống
 async def check_proxy(session, proxy, proxy_type):
     test_url = "http://httpbin.org/ip"
     proxy_url = f"{proxy_type}://{proxy}"
@@ -30,12 +38,12 @@ async def check_proxy(session, proxy, proxy_type):
                 return {
                     "proxy": proxy,
                     "type": proxy_type.upper(),
-                    "more_info": TAGS  # Trả về toàn bộ danh sách tag
+                    "more_info": TAGS
                 }
     except:
         return None
 
-# Tải và lọc proxy
+# 🔍 Lấy và lọc proxy sống
 async def fetch_and_validate_proxies(limit):
     proxies = set()
     async with aiohttp.ClientSession() as session:
@@ -54,26 +62,35 @@ async def fetch_and_validate_proxies(limit):
             check_proxy(session, proxy, ptype)
             for proxy, ptype in proxies
         ]
-        results = await asyncio.gather(*tasks)
-        live_proxies = [r for r in results if r]
-        random.shuffle(live_proxies)
-        return live_proxies[:limit]
 
-# Xác định loại proxy từ URL
-def detect_type(url):
-    if "socks5" in url:
-        return "socks5"
-    elif "socks4" in url:
-        return "socks4"
-    else:
-        return "http"
+        results = []
+        for task in asyncio.as_completed(tasks):
+            result = await task
+            if result:
+                results.append(result)
+            if len(results) >= min(limit, 100):
+                break
+        return results
 
-# API endpoint
+# 📦 API JSON: Trả về proxy chi tiết
 @app.route('/getproxy=<int:count>', methods=['GET'])
 def get_proxy(count):
+    if count > 100:
+        return jsonify({
+            "thanhcong": False,
+            "thongbao": "Số lượng yêu cầu vượt quá giới hạn (tối đa 100 proxy)"
+        })
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     proxies = loop.run_until_complete(fetch_and_validate_proxies(count))
+
+    if len(proxies) < count:
+        return jsonify({
+            "thanhcong": False,
+            "thongbao": f"Không đủ proxy sống. Chỉ tìm được {len(proxies)} proxy."
+        })
+
     return jsonify({
         "thanhcong": True,
         "soproxyget": count,
@@ -81,6 +98,22 @@ def get_proxy(count):
         "danh_sach_proxy": proxies
     })
 
-# Chạy server
+# 📄 API RAW: Trả về danh sách proxy dạng text thuần
+@app.route('/getproxyraw=<int:count>', methods=['GET'])
+def get_proxy_raw(count):
+    if count > 100:
+        return Response("Số lượng yêu cầu vượt quá giới hạn (tối đa 100 proxy)", status=400)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    proxies = loop.run_until_complete(fetch_and_validate_proxies(count))
+
+    if len(proxies) < count:
+        return Response(f"Không đủ proxy sống. Chỉ tìm được {len(proxies)} proxy.", status=503)
+
+    raw_list = "\n".join([p["proxy"] for p in proxies])
+    return Response(raw_list, mimetype='text/plain')
+
+# 🚀 Chạy server
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
