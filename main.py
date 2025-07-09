@@ -1,6 +1,6 @@
 import asyncio
 import aiohttp
-from flask import Flask, jsonify, Response
+from flask import Flask, jsonify, Response, json
 
 app = Flask(__name__)
 
@@ -72,7 +72,7 @@ async def fetch_and_validate_proxies(limit):
                 break
         return results
 
-# 📦 API JSON: Trả về proxy chi tiết
+# 📦 API JSON: Trả về proxy chi tiết, định dạng đẹp
 @app.route('/getproxy=<int:count>', methods=['GET'])
 def get_proxy(count):
     if count > 100:
@@ -91,12 +91,18 @@ def get_proxy(count):
             "thongbao": f"Không đủ proxy sống. Chỉ tìm được {len(proxies)} proxy."
         })
 
-    return jsonify({
+    data = {
         "thanhcong": True,
         "soproxyget": count,
         "sodem_proxy_song": len(proxies),
         "danh_sach_proxy": proxies
-    })
+    }
+
+    return app.response_class(
+        response=json.dumps(data, indent=2, ensure_ascii=False),
+        status=200,
+        mimetype='application/json'
+    )
 
 # 📄 API RAW: Trả về danh sách proxy dạng text thuần
 @app.route('/getproxyraw=<int:count>', methods=['GET'])
